@@ -32,6 +32,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text as sa_text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -149,7 +150,7 @@ class SessionRecord(Base, TimestampMixin, SoftDeleteMixin):
         JSONB,
         nullable=False,
         default=dict,
-        server_default="'{}'::jsonb",
+        server_default=sa_text("'{}'::jsonb"),
         comment="Phase 2: AI 诊断 / SOP 数据",
     )
 
@@ -173,10 +174,10 @@ class SessionRecord(Base, TimestampMixin, SoftDeleteMixin):
         Index("ix_sessions_therapist_id", "therapist_id"),
         Index("ix_sessions_scheduled_at", "scheduled_at"),
         Index("ix_sessions_status", "status"),
+        # Phase 2 排班冲突检测查询使用
         Index(
             "ix_sessions_therapist_scheduled_status",
             "therapist_id", "scheduled_at", "status",
-            comment="排班冲突检测查询使用（Phase 2）",
         ),
         {"comment": "预约与销课记录"},
     )

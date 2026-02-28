@@ -17,8 +17,16 @@ Alembic 迁移环境配置
 import asyncio
 import os
 from logging.config import fileConfig
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from alembic import context
+
+# 加载 backend/.env（开发环境本地配置）
+# 优先顺序：已有环境变量 > .env 文件（override=False 不覆盖 CI 注入的值）
+_env_file = Path(__file__).parent.parent / ".env"
+load_dotenv(_env_file, override=False)
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine

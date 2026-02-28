@@ -15,7 +15,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text, text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -94,7 +94,7 @@ class Course(Base, TimestampMixin, SoftDeleteMixin):
         JSONB,
         nullable=False,
         default=dict,
-        server_default="'{}'::jsonb",
+        server_default=sa_text("'{}'::jsonb"),
         comment="扩展元数据（JSON）",
     )
 

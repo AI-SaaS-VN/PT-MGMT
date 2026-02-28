@@ -18,7 +18,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, String, Text, UniqueConstraint, text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -116,7 +116,7 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
         JSONB,
         nullable=False,
         default=dict,
-        server_default="'{}'::jsonb",
+        server_default=sa_text("'{}'::jsonb"),
         comment="Phase 2: AI 诊断画像（初始为空 JSON）",
     )
 

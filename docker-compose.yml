@@ -1,0 +1,64 @@
+# docker-compose.yml — 本地开发基础设施
+#
+# 仅包含外部服务（PostgreSQL + Redis）。
+# 后端 FastAPI 应用在开发阶段直接在宿主机运行（热重载更方便）。
+#
+# 启动：docker compose up -d
+# 停止：docker compose down
+# 删除数据卷（慎用！）：docker compose down -v
+
+services:
+
+  # ----------------------------------------------------------------
+  # PostgreSQL 16
+  # 凭证须与 backend/.env（或宿主机环境变量）中的 DATABASE_URL 一致
+  # ----------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: ptmgmt_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ptmgmt_user
+      POSTGRES_PASSWORD: ptmgmt_password
+      POSTGRES_DB: ptmgmt
+      # 时区统一设置为 UTC，避免时间字段歧义
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      # 宿主机 5432 → 容器 5432
+      # 如本机已有 PostgreSQL 占用 5432，可改为 "5433:5432"
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ptmgmt_user -d ptmgmt"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ----------------------------------------------------------------
+  # Redis 7
+  # ----------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ptmgmt_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+# ----------------------------------------------------------------
+# 命名卷（数据持久化）
+# ----------------------------------------------------------------
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local

@@ -93,7 +93,7 @@ def upgrade() -> None:
             "ai_profile",
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=False,
-            server_default="'{}'::jsonb",
+            server_default=sa.text("'{}'::jsonb"),
             comment="AI 诊断画像（Phase 2）",
         ),
         sa.Column("first_login_at", sa.DateTime(timezone=True), nullable=True),
