@@ -8,7 +8,10 @@ FastAPI 应用入口
     uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 已注册路由前缀：
-    /api/v1/auth    →  认证（微信登录、Token 刷新）
+    /api/v1/auth        →  认证（微信登录、Token 刷新）
+    /api/v1/customers   →  客户管理（CRUD）
+    /api/v1/packages    →  课包管理（销售、查询）
+    /api/v1/sessions    →  课次管理（预约、销课）
 
 全局错误处理（对应 architecture.md § 3.5 标准错误格式）：
     - RequestValidationError → 422，包含字段级错误详情
@@ -24,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.routers import auth
+from app.routers import auth, customers, packages, sessions
 from app.schemas.common import ErrorDetail, ErrorResponse
 
 # -----------------------------------------------------------------------
@@ -123,6 +126,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 API_V1_PREFIX = "/api/v1"
 
 app.include_router(auth.router, prefix=API_V1_PREFIX)
+app.include_router(customers.router, prefix=API_V1_PREFIX)
+app.include_router(packages.router, prefix=API_V1_PREFIX)
+app.include_router(sessions.router, prefix=API_V1_PREFIX)
 
 # -----------------------------------------------------------------------
 # 健康检查
