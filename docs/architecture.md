@@ -15,6 +15,7 @@
 5. [技术选型理由](#5-技术选型理由)
 6. [微信小程序配置与部署](#6-微信小程序配置与部署)
 7. [Git 操作指南](#7-git-操作指南)
+8. [并发控制、排班冲突与账号打通](#8-并发控制排班冲突与账号打通)
 
 ---
 
@@ -125,8 +126,12 @@
 
 ### 1.2 核心数据流说明
 
+**Phase 1 核心战略目标**: 将客户资产的掌控权从各技师手中转移到门店系统。技师对"自己客户"的独占式掌控（客户信息、课时记录均在技师私人手机/笔记）将被打破——所有数据统一沉淀到后台，店长可随时查看任意客户的全貌，为未来团队协作服务（Phase 2）打好数据基础。
+
 | 场景 | 数据流路径 |
 |---|---|
+| **[Phase 1 核心] 手动录入客户数据** | 店长/技师在管理后台 → 手动新增客户档案 + 补录历史课包/付款记录 → PostgreSQL → 客户资产从技师私有转为门店所有 |
+| **[Phase 1 核心] 批量导入历史数据** | 店长整理 Excel → POST /api/v1/customers/import → 系统自动匹配/新建客户 → 返回导入报告 |
 | 客户微信登录 | 小程序 → wx.login() → 后端 → 微信 jscode2session → 生成 JWT → 返回小程序 |
 | 客户预约 | 小程序 → POST /api/v1/sessions → FastAPI → PostgreSQL → 返回预约单 |
 | 管理员确认预约 | 管理后台 → PATCH /api/v1/sessions/{id}/confirm → FastAPI → PostgreSQL |
@@ -167,6 +172,9 @@ users (1) ─── (0..1) referrals [作为被推荐人 referee，只能被推�
 referrals (1) ─── (0..1) coupons [一条转介绍可奖励一张优惠券]
 
 users (1) ─── (0..N) notification_logs
+
+staff_profiles (1) ─── (0..N) therapist_availability
+                               [技师每日可服务时段配置，预约创建时用于冲突检测]
 ```
 
 ### 2.2 ERD 图示
@@ -213,6 +221,24 @@ users (1) ─── (0..N) notification_logs
 │     created_at            TIMESTAMPTZ                        │
 │     updated_at            TIMESTAMPTZ                        │
 │     deleted_at            TIMESTAMPTZ                        │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│       therapist_availability   (Phase 2 预留，Phase 1 不启用)  │
+├──────────────────────────────────────────────────────────────┤
+│ PK  id            UUID                                       │
+│ FK  staff_id      UUID  → users.id                           │
+│     date          DATE   NOT NULL  (当日日期 yyyy-mm-dd)       │
+│     start_time    TIME   NOT NULL  (可服务开始，如 09:00)      │
+│     end_time      TIME   NOT NULL  (可服务结束，如 18:00)      │
+│     is_available  BOOLEAN  DEFAULT TRUE  (FALSE=请假/休息)    │
+│     notes         TEXT                                       │
+│     created_at    TIMESTAMPTZ                                │
+│     updated_at    TIMESTAMPTZ                                │
+│                                                              │
+│  ● UNIQUE(staff_id, date, start_time)                        │
+│  ● Phase 1 不启用：售课即服务，无需跨技师排班管理               │
+│  ● Phase 2 启用：多技师治疗方案模式下，创建 Session 前须查此表  │
 └──────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────┐
@@ -273,6 +299,9 @@ users (1) ─── (0..N) notification_logs
 │ FK  customer_id             UUID  → users.id                │
 │ FK  customer_package_id     UUID  → customer_packages.id    │
 │ FK  therapist_id            UUID  → users.id                │
+│                             Phase 1: 须等于                  │
+│                             customer_packages.sold_by_staff_id│
+│                             Phase 2: 可由治疗方案独立指定技师  │
 │     scheduled_at            TIMESTAMPTZ  (客户预约的时间)      │
 │     confirmed_at            TIMESTAMPTZ  (管理员确认时间)      │
 │     completed_at            TIMESTAMPTZ  (实际完成时间)        │
@@ -401,6 +430,10 @@ users (1) ─── (0..N) notification_logs
 | 手机号全局唯一 | `UNIQUE INDEX ON users(phone)` |
 | 财务记录永久保留 | `transactions` 表无 `deleted_at` 列 |
 | 金额统一用分存储 | 所有 `_fen` 字段为 `INTEGER`，避免浮点精度问题 |
+| **Phase 1** 售课即服务 | 创建 Session 时后端须校验 `sessions.therapist_id = customer_packages.sold_by_staff_id`；违反则返回 400，确保 Phase 1 内每位客户始终由其签约技师服务 |
+| **Phase 2** 技师排班冲突检测 | 启用多技师治疗方案后，创建 Session 时后端查询 `therapist_availability` 及同时段 `sessions`（status IN pending/confirmed），若冲突返回 409；此表 Phase 1 建库但不启用 |
+| UnionID 跨平台账号合并 | `users.unionid` 为微信开放平台统一标识；PC Web 微信登录时须优先以 `unionid` 查找已有账号合并，禁止创建重复用户；小程序须绑定微信开放平台主体才能获取 `unionid` |
+| 销课并发行锁 | `PATCH /sessions/{id}/complete` 须先 `SELECT ... FOR UPDATE` 锁定 `sessions` 行做幂等检查，再锁定 `customer_packages` 行执行 `sessions_used += 1`，全程在同一数据库事务内完成，防止并发双重销课 |
 
 ---
 
@@ -429,6 +462,7 @@ Content-Type: application/json
   "role": "customer",
   "phone": "13800138000",
   "wx_openid": "oXXXXXXXXXXXXXXXXXXXXXXXX",
+  "wx_unionid": "oYYYYYYYYYYYYYYYYYYYYYYYY",
   "staff_id": null,
   "iat": 1740700800,
   "exp": 1740787200
@@ -441,6 +475,7 @@ Content-Type: application/json
 | `role` | `admin` / `staff` / `customer` |
 | `phone` | 绑定手机号（可为 null） |
 | `wx_openid` | 微信 openid（可为 null） |
+| `wx_unionid` | 微信开放平台 UnionID（跨端账号合并必填，可为 null） |
 | `staff_id` | 技师档案 ID（仅 role=staff 时有值） |
 
 **Token 有效期**: Access Token 24小时；Refresh Token 7天
@@ -588,6 +623,9 @@ Content-Type: application/json
 | PATCH | `/staff/{id}` | admin | 更新技师信息 |
 | DELETE | `/staff/{id}` | admin | 软删除技师 |
 | GET | `/staff/{id}/commission-summary` | admin / self | 指定时间段佣金汇总 |
+| GET | `/staff/{id}/availability` | admin / self | 查询技师某周期排班 |
+| POST | `/staff/{id}/availability` | admin | 新增/批量设置技师可服务时段 |
+| DELETE | `/staff/{id}/availability/{date}` | admin | 删除某日排班（标记休息/请假） |
 
 #### 课程目录 Courses
 
@@ -618,7 +656,7 @@ Content-Type: application/json
 
 | 方法 | 路径 | 调用方 | 说明 |
 |---|---|---|---|
-| POST | `/sessions` | customer / admin | 发起预约（状态: pending） |
+| POST | `/sessions` | customer / admin | 发起预约（状态: pending）；后端自动检测技师时段冲突，冲突返回 409 |
 | GET | `/sessions` | admin(全部) / customer(自己) | 预约/销课列表 |
 | GET | `/sessions/{id}` | admin / participant | 预约详情 |
 | PATCH | `/sessions/{id}/confirm` | admin | 确认预约（pending→confirmed） |
@@ -702,6 +740,24 @@ Content-Type: application/json
                     └────────────┬────────────┘
                                  │ POST /sessions
                                  ▼
+                    ┌────────────────────────────────────┐
+                    │  后端校验（Phase 1 必须）            │
+                    │  therapist_id ==                   │
+                    │  customer_package.sold_by_staff_id?│
+                    └──────┬──────────────┬─────────────┘
+              校验通过       │              │  不一致
+                            ▼              ▼
+                                  ┌─────────────────────┐
+                                  │  返回 400            │
+                                  │  THERAPIST_MISMATCH  │
+                                  │  Phase 1: 只能由     │
+                                  │  签约技师服务         │
+                                  └─────────────────────┘
+                    ┌──────────────────────────────────┐
+                    │  [Phase 2] 排班冲突检测（暂不启用）  │
+                    │  查 therapist_availability        │
+                    │  + 同时段已有预约? → 409           │
+                    └──────────────────────────────────┘
                          ┌──────────────┐
                          │   PENDING    │  待确认
                          │   (待管理员   │
@@ -727,16 +783,22 @@ Content-Type: application/json
   │  COMPLETED   │                │    NO_SHOW       │
   │  已完成       │                │  (不扣课时)       │
   │              │                └──────────────────┘
-  │ 自动触发:     │
-  │ ① sessions_used += 1          │
-  │ ② 计算技师佣金                  │
-  │ ③ 若课包耗尽→package depleted   │
+  │ 自动触发（需行锁，Risk 3）:      │
+  │ ① SELECT sessions FOR UPDATE  │
+  │   (幂等检查，防重复完成)         │
+  │ ② SELECT customer_packages    │
+  │   FOR UPDATE (锁定课包行)       │
+  │ ③ sessions_used += 1          │
+  │ ④ 计算技师佣金                  │
+  │ ⑤ COMMIT                      │
+  │ ⑥ 若课包耗尽→package depleted  │
   └──────────────┘
 
 注意:
 • 管理员可直接创建 COMPLETED 状态记录（补录历史数据）
 • NO_SHOW 默认不扣课时
 • 只有 COMPLETED 触发课时扣减和佣金计算
+• COMPLETED 的所有写操作须包裹在同一数据库事务内，第 2 个并发请求在幂等检查处返回 409
 ```
 
 ### 4.2 支付状态机 (Transaction State Machine)
@@ -1051,6 +1113,256 @@ git rm --cached .env
 git commit -m "chore: remove accidentally committed .env"
 # 立即重置所有密钥！！！
 ```
+
+---
+
+---
+
+## 8. 并发控制、排班冲突与账号打通
+
+### 8.1 技师服务模式：Phase 1 vs Phase 2
+
+#### Phase 1（当前实现）：售课即服务，单一技师负责制
+
+**业务背景**: 门店当前模式是哪位技师销售课包，该技师即全程负责该客户的所有课时服务。客户与技师之间存在固定的一对一关系。
+
+**Phase 1 后端校验逻辑**（`POST /sessions`）:
+
+```sql
+-- 校验技师身份：必须是课包的销售技师
+SELECT sold_by_staff_id FROM customer_packages
+WHERE id = :package_id;
+
+-- 若 sold_by_staff_id != :therapist_id → 返回 400 THERAPIST_MISMATCH
+```
+
+**Phase 1 校验失败响应体**:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "THERAPIST_MISMATCH",
+    "message": "Phase 1 限制：只能由销售该课包的技师提供服务。",
+    "details": {
+      "package_id": "cpkg_...",
+      "expected_therapist_id": "stf_01J9...",
+      "provided_therapist_id": "stf_02K0..."
+    }
+  }
+}
+```
+
+**Phase 1 无需启用 `therapist_availability` 表**：在单一技师负责制下，同一技师的客户预约本身在时间上由技师自行调配（技师了解自己的日程），系统只需记录数据，不需要做跨技师冲突检测。
+
+#### Phase 2（未来扩展）：多技师治疗方案模式
+
+详见 [Section 8.4](#84-phase-2-多技师治疗方案预留设计)。届时启用 `therapist_availability` 表进行排班冲突检测，冲突时返回：
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "THERAPIST_SCHEDULE_CONFLICT",
+    "message": "该技师在此时段已有其他预约，请联系店长或选择其他时间。",
+    "details": {
+      "conflicting_session_id": "sess_01J9...",
+      "therapist_id": "stf_01J9...",
+      "requested_at": "2026-03-05T14:00:00+08:00"
+    }
+  }
+}
+```
+
+---
+
+### 8.2 微信 UnionID 跨平台账号打通（Risk 2）
+
+**问题**: 同一微信用户在不同接入平台下 `openid` 不同（小程序 ≠ 公众号 ≠ PC Web 微信登录），若只存 `openid` 则 PC 管理后台与小程序客户端数据完全割裂。
+
+**前提**: 小程序、PC Web（未来）必须在[微信开放平台](https://open.weixin.qq.com)绑定同一主体，`jscode2session` 才会返回 `unionid`。**上线前务必完成此绑定操作**，否则 `unionid` 为空，跨端合并无法实现。
+
+**账号查找与合并策略**:
+
+| 登录场景 | 查找顺序 | 合并逻辑 |
+|---|---|---|
+| 小程序 `wx.login` | 先查 `openid` → 再查 `unionid` | 若两者不同 user → 合并（保留最早创建的记录） |
+| PC Web 微信扫码（Phase 2）| 先查 `unionid` → 再查 `openid` | 找到已有账号则直接登录，无需新建 |
+| 手机号登录（Phase 2）| 查 `phone` | 若同时存在 `unionid` 则更新现有账号 |
+
+**登录时的合并 SQL 逻辑**:
+
+```sql
+-- 小程序登录：优先以 unionid 查找，防止多端创建重复账号
+SELECT * FROM users
+WHERE unionid = :unionid AND deleted_at IS NULL
+LIMIT 1;
+
+-- 若未找到，回退到 openid
+SELECT * FROM users
+WHERE openid = :openid AND deleted_at IS NULL
+LIMIT 1;
+
+-- 若仍未找到，创建新用户（同时存储 openid + unionid）
+INSERT INTO users (openid, unionid, wechat_nickname, ...)
+VALUES (:openid, :unionid, :nickname, ...);
+```
+
+**JWT 中需携带 `wx_unionid`**（用于日志溯源与跨端调试）:
+
+```json
+{
+  "sub": "usr_01J9XZ2M3N4K5P6Q7R8S9T0V",
+  "role": "customer",
+  "phone": "13800138000",
+  "wx_openid": "oXXXXXXXXXXXXXXXXXXXXXXXX",
+  "wx_unionid": "oYYYYYYYYYYYYYYYYYYYYYYYY",
+  "staff_id": null,
+  "iat": 1740700800,
+  "exp": 1740787200
+}
+```
+
+> ⚠️ **上线检查清单**
+> 1. 在微信开放平台完成"移动应用/小程序关联"，确认 `jscode2session` 返回值含 `unionid`
+> 2. `users.unionid` 列加唯一索引（已在 ERD 中定义），防止合并后重复写入
+> 3. Phase 2 PC Web 登录接口实现时，必须先查 `unionid` 再建用户
+
+---
+
+### 8.3 销课并发行锁（Risk 3）
+
+**问题**: 店长与技师可能同时调用 `PATCH /sessions/{id}/complete`，导致 `sessions_used` 被双重扣减（从剩余 5 次扣到 3 次而非 4 次），造成账目错误。
+
+**方案**: 数据库行锁（`SELECT ... FOR UPDATE`）+ 事务 + 幂等检查
+
+`complete_session()` 后端函数须严格按以下顺序执行：
+
+```sql
+BEGIN;
+
+-- Step 1: 幂等检查，加行锁防止并发进入
+SELECT status FROM sessions
+WHERE id = :session_id
+FOR UPDATE;
+-- 若 status != 'confirmed' → ROLLBACK → 返回 409 SESSION_ALREADY_PROCESSED
+
+-- Step 2: 锁定课包行，防止并发写入课时
+SELECT sessions_used, sessions_total, sessions_gifted
+FROM customer_packages
+WHERE id = :package_id
+FOR UPDATE;
+-- 第 2 个并发请求在此阻塞，等待 Step 1 的事务提交/回滚后才继续
+-- 若 sessions_used >= sessions_total + sessions_gifted → ROLLBACK → 返回 400
+
+-- Step 3: 原子更新（在同一事务内）
+UPDATE sessions
+SET status = 'completed',
+    completed_at = NOW(),
+    session_type = :session_type,
+    body_areas = :body_areas,
+    clinical_notes = :clinical_notes,
+    therapist_commission_fen = :commission
+WHERE id = :session_id;
+
+UPDATE customer_packages
+SET sessions_used = sessions_used + 1
+WHERE id = :package_id;
+
+COMMIT;
+```
+
+**SQLAlchemy (AsyncIO) 实现参考**:
+
+```python
+# backend/routers/sessions.py
+async def complete_session(session_id: UUID, body: CompleteSessionBody, db: AsyncSession):
+    async with db.begin():
+        # Step 1: 幂等行锁
+        stmt = (
+            select(Session)
+            .where(Session.id == session_id)
+            .with_for_update()
+        )
+        session = (await db.execute(stmt)).scalar_one_or_none()
+        if not session or session.status != "confirmed":
+            raise ConflictError("SESSION_ALREADY_PROCESSED")
+
+        # Step 2: 课包行锁
+        stmt = (
+            select(CustomerPackage)
+            .where(CustomerPackage.id == session.customer_package_id)
+            .with_for_update()
+        )
+        package = (await db.execute(stmt)).scalar_one()
+        if package.sessions_used >= package.sessions_total + package.sessions_gifted:
+            raise BusinessError("PACKAGE_INSUFFICIENT_SESSIONS")
+
+        # Step 3: 原子更新
+        session.status = "completed"
+        session.completed_at = datetime.now(tz=timezone.utc)
+        session.therapist_commission_fen = calculate_commission(package, session)
+        package.sessions_used += 1
+        # db.begin() 上下文管理器在退出时自动 COMMIT 或 ROLLBACK
+```
+
+**并发时序保障**:
+
+```
+时间轴:   店长请求          技师请求
+t=0:      FOR UPDATE ──────► 阻塞等待锁
+t=1:      status='confirmed' ✓
+t=2:      sessions_used += 1
+t=3:      COMMIT ──────────► 锁释放，技师获得锁
+t=4:                          status='completed' ≠ 'confirmed'
+t=5:                          → ROLLBACK → 返回 409
+```
+
+---
+
+### 8.4 Phase 2 多技师治疗方案预留设计
+
+**业务背景**: 随着门店规模扩大，会引入"首席诊疗师接诊 → 出治疗方案 → 分配不同专项技师"的协作模式：
+
+```
+诊疗师（接诊）
+  └─ 制定治疗方案
+       ├─ 康复技师  负责「颈椎康复训练」课程
+       └─ 功能技师  负责「功能性力量训练」课程
+```
+
+**数据库升级计划（Phase 2）**:
+
+```
+新增表: treatment_plans
+┌──────────────────────────────────────────────────────────────┐
+│                     treatment_plans                          │
+├──────────────────────────────────────────────────────────────┤
+│ PK  id                  UUID                                 │
+│ FK  customer_id         UUID  → users.id                     │
+│ FK  lead_therapist_id   UUID  → users.id  (首席诊疗师)        │
+│     diagnosis_notes     TEXT  (评估结论)                      │
+│     plan_items          JSONB (各专项安排)                    │
+│     status              VARCHAR(20)  active/completed        │
+│     created_at          TIMESTAMPTZ                          │
+│     updated_at          TIMESTAMPTZ                          │
+└──────────────────────────────────────────────────────────────┘
+
+sessions 表新增:
+│ FK  treatment_plan_id   UUID  → treatment_plans.id  (nullable)│
+│     treatment_item_type VARCHAR(50)  rehabilitation/strength/...│
+```
+
+**Phase 1 → Phase 2 迁移路径**:
+
+| 字段/规则 | Phase 1 | Phase 2 |
+|---|---|---|
+| `sessions.therapist_id` | 必须等于 `sold_by_staff_id` | 由 `treatment_plan` 独立指定 |
+| `therapist_availability` | 建库不启用 | 启用，排班冲突检测生效 |
+| 客户-技师关系 | 一对一（固定签约） | 一对多（按项目分配） |
+| `sessions.treatment_plan_id` | NULL | 关联治疗方案 |
+
+> Phase 1 建库时 `sessions.treatment_plan_id` 默认 NULL，升级 Phase 2 只需 `ALTER TABLE sessions ADD COLUMN treatment_plan_id UUID` 加 `therapist_availability` 逻辑开关，**不需要重建表结构**，平滑升级。
 
 ---
 

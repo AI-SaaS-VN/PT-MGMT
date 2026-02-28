@@ -1,0 +1,35 @@
+# ============================================================
+# PT-MGMT Backend — Python Dependencies
+# Python 3.12+  |  FastAPI async stack
+# ============================================================
+
+# --- Web Framework ---
+fastapi==0.115.5
+uvicorn[standard]==0.32.1          # ASGI server（含 websockets + httptools）
+
+# --- Database ---
+sqlalchemy==2.0.36                 # ORM，使用 2.0 Mapped[] 风格
+alembic==1.14.0                    # 数据库迁移
+asyncpg==0.30.0                    # PostgreSQL 异步驱动
+
+# --- Settings / Validation ---
+pydantic==2.10.3
+pydantic-settings==2.6.1           # 读取 .env 文件
+
+# --- Auth ---
+python-jose[cryptography]==3.3.0   # JWT 创建 / 验证
+passlib[bcrypt]==1.7.4             # 密码哈希（admin 登录用）
+
+# --- HTTP Client ---
+httpx==0.28.1                      # 异步 HTTP（微信 jscode2session 等外部 API）
+
+# --- Cache / Queue ---
+redis==5.2.1                       # Redis 客户端（JWT 黑名单 / 限流计数）
+celery==5.4.0                      # 异步任务（通知推送 / Excel 导出）
+
+# --- Utilities ---
+python-multipart==0.0.18           # Form data 支持（文件上传）
+openpyxl==3.1.5                    # Excel 导入 / 导出
+
+# --- Development only ---
+# pip install -r requirements-dev.txt
