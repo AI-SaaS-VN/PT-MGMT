@@ -16,10 +16,12 @@
     "borderStyle": "white",
     "list": [
       {
+        "pagePath": "pages/login/login",
+        "text": "登录"
+      },
+      {
         "pagePath": "pages/my-balance/my-balance",
-        "text": "我的课包",
-        "iconPath": "assets/icons/balance.png",
-        "selectedIconPath": "assets/icons/balance-active.png"
+        "text": "我的课包"
       }
     ]
   },

@@ -1,5 +1,5 @@
 {
-  "appid": "your-appid-here",
+  "appid": "wx2d61b46076a714da",
   "projectname": "pt-mgmt-miniapp",
   "compileType": "miniprogram",
   "libVersion": "3.4.3",
@@ -39,11 +39,21 @@
     "disableUseStrict": false,
     "minifyWXML": true,
     "showES6CompileOption": false,
-    "useCompilerPlugins": false
+    "useCompilerPlugins": false,
+    "compileWorklet": false,
+    "localPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true
   },
   "condition": {},
   "editorSetting": {
     "tabIndent": "insertSpaces",
     "tabSize": 2
+  },
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
   }
 }
