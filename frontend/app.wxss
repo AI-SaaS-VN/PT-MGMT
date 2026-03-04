@@ -1,0 +1,62 @@
+/* app.wxss — 全局样式 */
+
+/* CSS 变量：颜色系统 */
+page {
+  --color-primary: #1976D2;
+  --color-primary-light: #BBDEFB;
+  --color-success: #388E3C;
+  --color-warning: #F57C00;
+  --color-danger: #D32F2F;
+  --color-text-primary: #212121;
+  --color-text-secondary: #757575;
+  --color-border: #E0E0E0;
+  --color-bg: #F5F5F5;
+  --color-card-bg: #FFFFFF;
+
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  font-size: 28rpx;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg);
+  box-sizing: border-box;
+}
+
+/* 通用卡片 */
+.card {
+  background: var(--color-card-bg);
+  border-radius: 16rpx;
+  padding: 32rpx;
+  margin: 20rpx 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+}
+
+/* 主按钮 */
+.btn-primary {
+  background: var(--color-primary);
+  color: #ffffff;
+  border-radius: 12rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  padding: 24rpx 0;
+  text-align: center;
+}
+
+/* 状态标签 */
+.tag {
+  display: inline-block;
+  padding: 4rpx 16rpx;
+  border-radius: 8rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+}
+
+.tag-paid    { background: #E8F5E9; color: var(--color-success); }
+.tag-pending { background: #FFF3E0; color: var(--color-warning); }
+.tag-refunded { background: #FFEBEE; color: var(--color-danger); }
+
+/* 空状态提示 */
+.empty-tip {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: 80rpx 0;
+  font-size: 28rpx;
+}

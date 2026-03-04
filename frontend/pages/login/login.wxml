@@ -1,0 +1,25 @@
+<!-- pages/login/login.wxml -->
+<view class="container">
+  <!-- Logo / 标题区 -->
+  <view class="hero">
+    <view class="logo-placeholder">PT</view>
+    <text class="title">物理疗法门店</text>
+    <text class="subtitle">课时余额查询</text>
+  </view>
+
+  <!-- 登录区 -->
+  <view class="login-box">
+    <button
+      class="btn-wechat {{loading ? 'loading' : ''}}"
+      bindtap="onLoginTap"
+      disabled="{{loading}}"
+    >
+      <text wx:if="{{!loading}}">微信一键登录</text>
+      <text wx:else>登录中...</text>
+    </button>
+
+    <text class="error-msg" wx:if="{{errorMsg}}">{{errorMsg}}</text>
+
+    <text class="hint">登录即同意门店服务条款</text>
+  </view>
+</view>

@@ -1,0 +1,85 @@
+<!-- pages/my-balance/my-balance.wxml -->
+
+<!-- 加载中 -->
+<view wx:if="{{loading}}" class="loading-wrap">
+  <view class="loading-spinner"></view>
+  <text class="loading-text">加载中...</text>
+</view>
+
+<!-- 错误提示 -->
+<view wx:elif="{{errorMsg}}" class="empty-tip">
+  <text>⚠ {{errorMsg}}</text>
+</view>
+
+<!-- 主内容 -->
+<block wx:else>
+
+  <!-- 用户信息 + 总余额 Banner -->
+  <view class="banner">
+    <view class="banner-user">
+      <text class="banner-name">{{userInfo.display_name || '客户'}}</text>
+      <text class="banner-logout" bindtap="onLogoutTap">退出</text>
+    </view>
+    <view class="banner-total">
+      <text class="banner-total-num">{{totalRemaining}}</text>
+      <text class="banner-total-label">节剩余课时（已付清课包合计）</text>
+    </view>
+  </view>
+
+  <!-- 课包列表 -->
+  <view wx:if="{{packages.length === 0}}" class="empty-tip">
+    <text>暂无课包记录</text>
+  </view>
+
+  <view wx:else class="pkg-list">
+    <view
+      class="pkg-card"
+      wx:for="{{packages}}"
+      wx:key="id"
+    >
+      <!-- 课包头部：课程名 + 状态标签 -->
+      <view class="pkg-header">
+        <text class="pkg-course">课包 {{index + 1}}</text>
+        <text class="tag tag-{{item.payment_status}}">{{item.status_label}}</text>
+      </view>
+
+      <!-- 课时进度 -->
+      <view class="pkg-progress-row">
+        <view class="pkg-remaining">
+          <text class="remaining-num">{{item.sessions_remaining}}</text>
+          <text class="remaining-label"> / {{item.sessions_total + item.sessions_gifted}} 节</text>
+        </view>
+        <text class="remaining-tip">剩余课时</text>
+      </view>
+
+      <!-- 进度条 -->
+      <view class="progress-bar-bg">
+        <view
+          class="progress-bar-fill"
+          style="width: {{(item.sessions_remaining / (item.sessions_total + item.sessions_gifted || 1)) * 100}}%"
+        ></view>
+      </view>
+
+      <!-- 购买详情 -->
+      <view class="pkg-details">
+        <view class="detail-row">
+          <text class="detail-label">已消耗</text>
+          <text class="detail-value">{{item.sessions_used}} 节</text>
+        </view>
+        <view class="detail-row" wx:if="{{item.sessions_gifted > 0}}">
+          <text class="detail-label">赠送</text>
+          <text class="detail-value">+{{item.sessions_gifted}} 节</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">购买日期</text>
+          <text class="detail-value">{{item.purchase_date_str}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">到期日</text>
+          <text class="detail-value">{{item.expiry_str}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+</block>
