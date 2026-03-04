@@ -28,6 +28,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import decode_token
@@ -70,9 +71,12 @@ async def get_current_user(
     if not user_id:
         raise credentials_exception
 
-    # 查询用户（同时过滤软删除）
+    # 查询用户（同时过滤软删除），eagerly load staff_profile so
+    # create_access_token can include staff_id without triggering a lazy SELECT.
     result = await db.execute(
-        select(User).where(
+        select(User)
+        .options(selectinload(User.staff_profile))
+        .where(
             User.id == user_id,
             User.deleted_at.is_(None),
         )

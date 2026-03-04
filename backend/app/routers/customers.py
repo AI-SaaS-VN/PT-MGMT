@@ -140,6 +140,7 @@ async def create_customer(
     )
     db.add(customer)
     await db.commit()
+    await db.refresh(customer)
     return SuccessResponse(
         data=CustomerResponse.model_validate(customer),
         message="客户创建成功",
@@ -184,6 +185,7 @@ async def update_customer(
         setattr(customer, field, value)
 
     await db.commit()
+    await db.refresh(customer)
     return SuccessResponse(data=CustomerResponse.model_validate(customer))
 
 

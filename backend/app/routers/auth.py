@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import create_access_token, create_refresh_token, decode_token
@@ -88,7 +89,9 @@ async def wx_login(
     if unionid:
         # 2a. 优先用 unionid 查找（跨平台账号合并的关键）
         result = await db.execute(
-            select(User).where(
+            select(User)
+            .options(selectinload(User.staff_profile))
+            .where(
                 User.unionid == unionid,
                 User.deleted_at.is_(None),
             )
@@ -108,7 +111,9 @@ async def wx_login(
     if user is None:
         # 2b. unionid 为空 或 unionid 未匹配 → 用 openid 查找
         result = await db.execute(
-            select(User).where(
+            select(User)
+            .options(selectinload(User.staff_profile))
+            .where(
                 User.openid == openid,
                 User.deleted_at.is_(None),
             )
@@ -147,6 +152,8 @@ async def wx_login(
 
     # ---- Step 7: 提交事务 ----
     await db.commit()
+    # refresh 防止 commit 后属性过期触发隐式 lazy-load（MissingGreenlet）
+    await db.refresh(user)
 
     return SuccessResponse(
         data=WxLoginResponse(
@@ -259,7 +266,9 @@ async def refresh_token(
         raise credentials_exception
 
     result = await db.execute(
-        select(User).where(
+        select(User)
+        .options(selectinload(User.staff_profile))
+        .where(
             User.id == user_id,
             User.deleted_at.is_(None),
         )

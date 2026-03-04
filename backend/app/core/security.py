@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import inspect as sa_inspect
 
 from app.core.config import settings
 
@@ -39,9 +40,13 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def _build_payload(user: "User", token_type: str, expires_delta: timedelta) -> dict:  # type: ignore[name-defined]
     """构建 JWT payload（内部辅助函数）。"""
     now = datetime.now(tz=timezone.utc)
+    # Read staff_profile only if already loaded in the ORM identity map.
+    # Accessing the relationship directly triggers a lazy SELECT which raises
+    # MissingGreenlet inside an async session.
     staff_id = None
-    if hasattr(user, "staff_profile") and user.staff_profile:
-        staff_id = str(user.staff_profile.id)
+    loaded_profile = sa_inspect(user).dict.get("staff_profile")
+    if loaded_profile is not None:
+        staff_id = str(loaded_profile.id)
 
     return {
         "sub": str(user.id),

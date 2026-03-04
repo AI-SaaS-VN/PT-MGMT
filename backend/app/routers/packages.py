@@ -44,12 +44,18 @@ router = APIRouter(prefix="/packages", tags=["课包管理"])
 )
 async def list_packages(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles("admin", "staff"))],
+    current_user: Annotated[User, Depends(get_current_user)],
     customer_id: uuid.UUID | None = Query(None),
     payment_status: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> SuccessResponse[PaginatedResponse[PackageListItem]]:
+    # Customers can only query their own packages; admin/staff can query any customer.
+    if current_user.role == "customer":
+        customer_id = current_user.id
+    elif current_user.role not in ("admin", "staff"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
+
     q = select(CustomerPackage).where(CustomerPackage.deleted_at.is_(None))
     if customer_id:
         q = q.where(CustomerPackage.customer_id == customer_id)
@@ -135,6 +141,7 @@ async def create_package(
     )
     db.add(pkg)
     await db.commit()
+    await db.refresh(pkg)
     return SuccessResponse(
         data=PackageResponse.model_validate(pkg),
         message="课包创建成功",
@@ -163,6 +170,7 @@ async def update_package(
         setattr(pkg, field, value)
 
     await db.commit()
+    await db.refresh(pkg)
     return SuccessResponse(data=PackageResponse.model_validate(pkg))
 
 

@@ -1,7 +1,7 @@
 // utils/request.js
 // 封装 wx.request，统一处理 Authorization header 和错误响应
 
-const BASE_URL = 'http://192.168.100.47:8000'; // 开发环境；生产环境替换为真实域名
+const BASE_URL = 'http://192.168.100.47:8000/api/v1'; // 开发环境；生产环境替换为真实域名
 
 /**
  * 发起 HTTP 请求

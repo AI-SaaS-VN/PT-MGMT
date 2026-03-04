@@ -147,6 +147,7 @@ async def create_session(
     )
     db.add(sess)
     await db.commit()
+    await db.refresh(sess)
     return SuccessResponse(
         data=SessionResponse.model_validate(sess),
         message="课次预约成功",
@@ -182,6 +183,7 @@ async def update_session(
         setattr(sess, field, value)
 
     await db.commit()
+    await db.refresh(sess)
     return SuccessResponse(data=SessionResponse.model_validate(sess))
 
 
@@ -247,6 +249,7 @@ async def complete_session(
     sess.completed_at = now
 
     await db.commit()
+    await db.refresh(sess)
     return SuccessResponse(
         data=SessionResponse.model_validate(sess),
         message="销课成功",
